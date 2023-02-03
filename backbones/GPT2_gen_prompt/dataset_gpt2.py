@@ -1,0 +1,84 @@
+# -*- coding: utf-8 -*-
+import torch
+from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
+
+IGNORE_INDEX = -100
+PAD = "[PAD]"
+CLS = "[CLS]"
+SEP = "[SEP]"
+
+class GPT2Dataset(Dataset):
+    def __init__(self, data, tokenizer, max_seq_len=512, batch_first=True, lm_labels=True):
+        self.data = data
+        self.tokenizer = tokenizer
+        self.max_seq_len = max_seq_len
+        self.tokenizer.pad_token = PAD
+        self.tokenizer.cls_token = CLS
+        self.tokenizer.sep_token = SEP
+        self.pad = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+        self.bos = tokenizer.convert_tokens_to_ids(tokenizer.cls_token)
+        self.eos = tokenizer.convert_tokens_to_ids(tokenizer.sep_token)
+        self.batch_first = batch_first
+        self.lm_labels = lm_labels
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        if self.lm_labels:
+            history = self.data[index][0]
+            response = self.data[index][1]
+            action_id = self.data[index][2]
+            topic_id = self.data[index][3]
+        else:
+            history = self.data[index][0]
+            action_id = self.data[index][2]
+            topic_id = self.data[index][3]
+            response = []
+        return self._process(history, response, action_id, topic_id)
+
+    def _process(self, history, response, action_id, topic_id):
+        # truncate previous tokens if dialogue history is too long
+        if len(history) > self.max_seq_len - 1:
+            history = history[-self.max_seq_len+1:]
+        
+        if self.lm_labels:
+            input_ids = [self.bos] + history + response + [self.eos]
+            lm_labels = [IGNORE_INDEX] * (len(history) + 1) + response + [self.eos]
+        else:
+            input_ids = [self.bos] + history
+            lm_labels = [IGNORE_INDEX] * (len(history) + 1)
+
+        instance = {}
+        instance["input_ids"] = input_ids
+        instance["lm_labels"] = lm_labels
+        instance["action_id"] = action_id
+        instance["topic_id"] = topic_id
+
+        return instance
+
+    def collate(self, batch):
+        input_ids = pad_sequence(
+            [torch.tensor(instance["input_ids"], dtype=torch.long) for instance in batch],
+            batch_first=self.batch_first, padding_value=self.pad)
+        labels = pad_sequence(
+            [torch.tensor(instance["lm_labels"], dtype=torch.long) for instance in batch],
+            batch_first=self.batch_first, padding_value=IGNORE_INDEX)
+
+        action_ids = torch.tensor([instance["action_id"] for instance in batch]).type(torch.LongTensor)
+        topic_ids = torch.tensor([instance["topic_id"] for instance in batch]).type(torch.LongTensor)
+        
+        return {
+            "input_ids": input_ids,
+            "labels": labels,
+            "action_id": action_ids,
+            "topic_id": topic_ids
+        }
+
+    def rl_collate(self, batch):
+
+        list_input_ids = [instance["input_ids"] for instance in batch]
+        list_labels = [instance['lm_labels'] for instance in batch]
+
+        return list_input_ids, list_labels

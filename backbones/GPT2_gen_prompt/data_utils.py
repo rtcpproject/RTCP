@@ -132,6 +132,34 @@ def tokenize(tokenizer, obj):
     return list(tokenize(tokenizer, o) for o in obj)
 
 
+def convert_input_to_response_features(dialog_history, knowledge, topic, action, profile = None):
+    # sample = json.loads(line)
+    # original_goal = sample["original_goal"]
+    user_profile = profile
+    history = dialog_history
+    resp_str = ""
+    knowledge_str = ""
+    context_str = ""
+    input_str = ""
+
+    # extract knowledge according to the action and topic.
+    kg_list = extract_knowledge(knowledge, topic)
+    for triple in kg_list:
+        kd = " ".join(triple)
+        knowledge_str += f"[{kd}]"
+
+    action = action
+    topic = topic
+
+    for hdx, utt_str in enumerate(history):
+        context_str += f"[{utt_str}]"
+    
+    action_id = ACTION2ID[action]
+    topic_id = TOPIC2ID[topic]
+
+    input_str = f"{action} {SEP} {topic} {SEP} {knowledge_str} {SEP} {context_str}"
+    return input_str, resp_str, action_id, topic_id
+
 def load_data(tokenizer, logger, dataset_path, cache_dir, data_partition="train", use_tcp=False, tcp_path=None):
     """ Load data from cache or create from raw data."""
     if use_tcp:

@@ -57,6 +57,8 @@ def convert_context_to_features(history, tokenizer, turn_type_size = 16, max_seq
 def convert_knowledge_to_features(knowledge, tokenizer, max_seq_len = 512, is_test = False):
     tokens, segs = [], []
     for h in knowledge:
+        if len(h) == 0:
+            continue
         ### source, relation and destination entities
         s,r,d = h
         ### concatenate theses entiteis into a string
@@ -267,3 +269,30 @@ class DuRecDialDataset(Dataset):
 
     def __getitem__(self, index):
         return self.instances[index]
+
+
+
+def convert_input_to_features(tokenizer, target_item, target_action, dialog_history, knowledge, topic_path, action_path, profile = None, turn_type_size = 16,  is_test = True, max_seq_len = 512):
+
+    h_ids, h_segs, h_poss = convert_context_to_features(dialog_history, tokenizer, turn_type_size, max_seq_len, is_test)
+    k_ids, k_segs, k_poss = convert_knowledge_to_features(knowledge, tokenizer, max_seq_len, is_test)
+    p_ids, p_segs, p_poss = convert_profile_to_features(profile, tokenizer, max_seq_len, is_test)
+    t_ids, t_segs, t_poss = convert_path_to_features(topic_path, action_path, target_action= target_action, target_topic = target_item, tokenizer = tokenizer, max_seq_len = max_seq_len, is_test = is_test)
+    inputs = {
+        "conversation_ids": h_ids,
+        "conversation_segs": h_segs,
+        "conversation_poss": h_poss,
+        "knowledge_ids": k_ids,
+        "knowledge_segs": k_segs,
+        "knowledge_poss": k_poss,
+        "profile_ids": p_ids,
+        "profile_segs": p_segs,
+        "profile_poss": p_poss,
+        "next_topic": 0,
+        "next_goal": 0,
+        "path_ids": t_ids,
+        "path_segs": t_segs,
+        "path_poss": t_poss,
+    }
+    feature = InputFeature(**inputs)
+    return feature
